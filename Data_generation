@@ -1,0 +1,130 @@
+
+
+####
+####    Zero Mass prior
+####
+
+
+library(MASS)
+library(pscl)
+library(MCMCpack)
+library(GIGrvg)
+library(statmod)
+library(LCA)
+library(LaplacesDemon)
+library(Matrix)
+library(magic)
+
+
+
+M <- 3                           ## number of groups
+p <- 12                          ## number of component
+K <- 5                           ## number of factor for true model
+n <- c(10,5,15)*10        ## Number of sample in each group
+gr_ind <- 1:M
+group <- c(rep(1,n[1]),rep(2,n[2]),rep(3,n[3]))
+N <- sum(n)                      ## sum of all group
+
+
+####
+####   Prior distribution and hyperparameter values
+####
+
+
+var_eta <- diag(1,K)             ## eta_i ~ MVN_K(mean_eta,var_eta)
+mean_eta <- rep(0,K)
+
+
+prob_a <- 1                      ##  pi ~ Beta (prob_a,prob_b)
+prob_b <- 1
+
+tau_alpha <- 1                   ## tau^2 ~ IG(tau_alpha,tau_beta)    
+tau_beta <- 1
+
+c <- 0.1                         ## sigma_{jm} ~ IG(c,d)
+d <- 0.1
+
+theta <- 1                       ## sqrt(nu_m) ~ HC(theta)
+a_m <- 0.2                       ## Which implies, nu_m|a_m ~ IG(0.5,1/(theta*a_m)), a_m ~ IG(0.5,1)
+
+
+
+eta_true <- array(NA,dim=c(N,K))      ## eta matrix. It is a N*K matrix where N=sum(n_m) 
+lambda_true <- array(NA,dim=c(p,K,M)) ## factor loading matrix
+w_true <- matrix(NA,nrow=p,ncol=K)    ## w matrix
+Y <- array(NA,dim=c(N,p))             ## observations. It is a N*p matrix where N=sum(n_m) 
+
+
+
+####
+####   True values for data generation
+####
+
+set.seed(1991)
+
+prob <- 0.5                      ## probability of mixture distribution
+tau <- 1
+nu_true <- rep(0.2,M)
+sigma_true <- array(0.3,dim=c(M,p))           
+Omega_mat <- array(NA,dim=c(p,p,M)) 
+for (m in 1:M)  
+{
+ indx <- which(group==m)
+ len <- length(indx)
+ eta_true[indx,] <- mvrnorm(n[m],mean_eta,var_eta)   ## eta matrix for each group
+}
+
+Z_true <- matrix(rbinom(p*K,1,prob),nrow=p)          ## Z matrix for simulationg omega
+
+for(j in 1:p)
+{
+ for(k in 1:K)
+   {
+     w_true[j,k] <- rnorm(1,0,Z_true[j,k]*tau)            ## W matrix  
+}
+}
+
+for(m in 1:M)                                   ## Factor loading matrix
+{
+for(j in 1:p)
+{
+ for(k in 1:K)
+  {
+   lambda_true[j,k,m] <- rnorm(1,w_true[j,k],Z_true[j,k]*nu_true[m])  ## lambda matrix
+}
+}
+}
+
+Omega_true <- array(NA,dim=c(p,p,M))                  ## Marginal covariance matrix of Y
+for(m in 1:M)
+{
+ Omega_true[,,m] <- lambda_true[,,m]%*%t(lambda_true[,,m])+diag(sigma_true[m,])
+}
+
+nMod <- 1:200 ##number of simulation dataset
+
+  
+for(len in 1:length(nMod))
+{
+SEED <- 2*nMod[len]          ## setting seed for different data generation
+set.seed(SEED)
+for(m in 1:M)                                   ## Data generation
+  {
+    for(i in 1:n[m])  { Y[group==m,][i,] <-   mvrnorm(1,lambda_true[,,m]%*%eta_true[group==m,][i,],diag(sigma_true[m,]))}
+  }
+fname <- paste("Y_sample_",len,".RData",sep="")
+save.image(fname)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
